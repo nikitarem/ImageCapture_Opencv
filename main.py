@@ -3,6 +3,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import Button,Label,Entry,messagebox
+from tkinter import ttk  # Добавляем ttk для Combobox
 from PIL import Image,ImageTk
 from datetime import datetime
 
@@ -13,17 +14,74 @@ def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
+# Функция для поиска доступных камер
+def find_available_cameras():
+    """Находит все доступные камеры в системе"""
+    available_cameras = []
+    # Проверяем первые 10 индексов камер
+    for i in range(10):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                available_cameras.append(f"Camera {i}")
+            cap.release()
+    return available_cameras
 
+# Функция для переключения камеры
+def switch_camera():
+    """Переключает активную камеру"""
+    global cam
+    selected_camera = camera_var.get()
+    if selected_camera:
+        # Извлекаем номер камеры из строки "Camera X"
+        camera_index = int(selected_camera.split()[-1])
+        
+        # Освобождаем текущую камеру
+        if cam:
+            cam.release()
+        
+        # Подключаемся к новой камере
+        cam = cv2.VideoCapture(camera_index)
+        if not cam.isOpened():
+            messagebox.showerror("Ошибка", f"Не удалось подключиться к {selected_camera}")
+            # Возвращаемся к камере по умолчанию
+            cam = cv2.VideoCapture(0)
+
+# Инициализация камеры
 cam = cv2.VideoCapture(0)
 captured_frame = None
-frame_png = resource_path("frame.png")
 icon_image = resource_path("icon.ico")
-
 
 # Create window
 window = tk.Tk()
 window.title("Capture image")
 window.iconbitmap(icon_image)
+
+# Добавляем фрейм для выбора камеры
+camera_frame = tk.Frame(window)
+camera_frame.pack(pady=5)
+
+camera_label = Label(camera_frame, text="Выберите камеру:")
+camera_label.pack(side='left', padx=5)
+
+# Создаем выпадающее меню для выбора камеры
+camera_var = tk.StringVar()
+camera_combo = ttk.Combobox(camera_frame, textvariable=camera_var, state="readonly", width=15)
+camera_combo.pack(side='left', padx=5)
+
+# Заполняем список доступных камер
+available_cameras = find_available_cameras()
+if available_cameras:
+    camera_combo['values'] = available_cameras
+    camera_combo.set(available_cameras[0])  # Устанавливаем первую камеру по умолчанию
+else:
+    camera_combo['values'] = ["Camera 0"]
+    camera_combo.set("Camera 0")
+
+# Кнопка для применения выбора камеры
+switch_button = Button(camera_frame, text="Применить", command=switch_camera, relief="raised", bg="#e0e0e0")
+switch_button.pack(side='left', padx=5)
 
 video_label=Label(window)
 video_label.pack()
@@ -35,8 +93,8 @@ directory_entry.insert(0, default_folder_to_save)
 def update_frame():
     if captured_frame is None:
         ret, frame = cam.read()
-        fliped_frame = cv2.flip(frame, 1)
         if ret:
+            fliped_frame = cv2.flip(frame, 1)
             # Convert to RGB and resize to fit within a 500x500 frame
             frame_rgb = cv2.cvtColor(fliped_frame, cv2.COLOR_BGR2RGB)
             h, w, _ = frame_rgb.shape
@@ -62,18 +120,14 @@ def update_frame():
             # Paste the resized image onto the blank frame
             blank_frame.paste(resized_pil, (x, y))
 
-            # Load and resize the frame image
-            frame_image = Image.open(frame_png).convert("RGBA")
-            frame_image = frame_image.resize((500, 500), Image.LANCZOS)
-
-            # Composite the frame over the live video feed
-            combined_image = Image.alpha_composite(blank_frame.convert("RGBA"), frame_image)
-
-            # Convert combined image to display in Tkinter
-            imageTk = ImageTk.PhotoImage(image=combined_image)
+            # Convert image to display in Tkinter (без наложения frame.png)
+            imageTk = ImageTk.PhotoImage(image=blank_frame)
             video_label.imageTk = imageTk
             video_label.configure(image=imageTk)
             capture_button.pack(side="left", padx=10)
+        else:
+            # Если камера недоступна, показываем сообщение
+            video_label.configure(text="Камера недоступна", image="")
     window.after(10, update_frame)
     
 #capturing 500x500 image   
@@ -90,7 +144,7 @@ def capture_image():
         crop_size = 500
         start_x = max(0, (w - crop_size) // 2)
 
-        # # If the height is less than 500, pad the top and bottom with black pixels
+        # If the height is less than 500, pad the top and bottom with black pixels
         if h < crop_size:
             padding = (crop_size - h) // 2
             cv2image = cv2.copyMakeBorder(cv2image, padding, padding, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0])
@@ -101,29 +155,21 @@ def capture_image():
         cropped_frame = cv2image[start_y:start_y + crop_size, start_x:start_x + crop_size]
 
         # Convert the cropped image to PIL format
-        img = Image.fromarray(cropped_frame).convert("RGBA")
+        img = Image.fromarray(cropped_frame)
         captured_frame = cropped_frame
 
-        # Open and resize the frame image
-        frame_image = Image.open(frame_png).convert("RGBA")
-        frame_image = frame_image.resize((crop_size, crop_size), Image.LANCZOS)
-        
-        # Ensure both images are the same size
-        if img.size == frame_image.size:
-            combined_image = Image.alpha_composite(img, frame_image)
-            imagetk = ImageTk.PhotoImage(image=combined_image)
-            video_label.imagetk = imagetk
-            video_label.configure(image=imagetk)
+        # Показываем захваченное изображение без frame.png
+        imagetk = ImageTk.PhotoImage(image=img)
+        video_label.imagetk = imagetk
+        video_label.configure(image=imagetk)
 
-            start_button.pack_forget()
-            capture_button.pack_forget()
-            submit_button.pack(side='left', padx=10)
-            retake_button.pack(side='left', padx=10)
-            close_button.pack(side='left', padx=10)
-            directory_label.pack(pady=5)
-            directory_entry.pack(pady=5)
-        else:
-            print("Size of cropped image and frame image do not match")
+        start_button.pack_forget()
+        capture_button.pack_forget()
+        submit_button.pack(side='left', padx=10)
+        retake_button.pack(side='left', padx=10)
+        close_button.pack(side='left', padx=10)
+        directory_label.pack(pady=5)
+        directory_entry.pack(pady=5)
     else:
         print("Failed to capture image")
 
@@ -146,19 +192,14 @@ def submit_image():
             messagebox.showerror("Error",f"Can't find the directory : {folder_to_save}")
             return  
         
-        cv2image=cv2.cvtColor(captured_frame,cv2.COLOR_BGR2RGB)
-        img=Image.fromarray(cv2image).convert("RGBA")
-        frame_image=Image.open(frame_png).convert("RGBA")
-        frame_image=frame_image.resize((500,500),Image.LANCZOS)
-        
-        combined_image=Image.alpha_composite(img,frame_image)
+        # Сохраняем изображение без frame.png
+        img = Image.fromarray(captured_frame)
         
         folder_to_save=directory_entry.get()
         timestamp=datetime.now().strftime("%Y%m%d_%H%M%S")
         filename=f"{timestamp}.png"
         filepath=os.path.join(folder_to_save,filename)
-        # cv2.imwrite(filepath,captured_frame)
-        combined_image.save(filepath)
+        img.save(filepath)
         print(f"Image saved {filepath}")
         
         captured_frame=None

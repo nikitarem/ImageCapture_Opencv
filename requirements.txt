@@ -1,4 +1,0 @@
-PyInstaller
-OpenCV-python
-Pillow
-Tkinter
