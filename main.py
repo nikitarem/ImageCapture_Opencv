@@ -148,21 +148,17 @@ class DualCameraApp:
                                     width=12, height=1)
         self.stop_button.pack(side='left', padx=2)
         
-        # Вторая строка кнопок
+        # Вторая строка кнопок - УБИРАЕМ кнопку "Сохранить"
         row2 = tk.Frame(buttons_grid)
         row2.pack(pady=2)
         
         self.capture_button = tk.Button(row2, text="📸 Снимок", 
-                                       command=self.capture_images, relief="raised", 
+                                       command=self.capture_and_save_images, relief="raised", 
                                        bg="#FFD700", font=("Arial", 9, "bold"),
-                                       width=12, height=1)
-        self.capture_button.pack(side='left', padx=2)
-        
-        self.save_button = tk.Button(row2, text="💾 Сохранить", 
-                                    command=self.save_images, relief="raised", 
-                                    bg="#98FB98", font=("Arial", 9, "bold"),
-                                    width=12, height=1)
-        self.save_button.pack(side='left', padx=2)
+                                       width=25, height=1)  # Увеличиваем ширину
+        self.capture_button.pack()
+         
+         # Убираем кнопку save_button полностью
         
         # Третья строка - закрыть
         row3 = tk.Frame(buttons_grid)
@@ -206,10 +202,9 @@ class DualCameraApp:
         self.directory_entry.insert(0, default_folder_to_save)
         self.directory_entry.pack(pady=5)
         
-        # Начальное состояние кнопок
+        # Начальное состояние кнопок - убираем save_button
         self.stop_button.config(state='disabled')
         self.capture_button.config(state='disabled')
-        self.save_button.config(state='disabled')
         
     def setup_cameras(self):
         """Настройка списка доступных камер"""
@@ -382,9 +377,12 @@ class DualCameraApp:
         
         print("Трансляция остановлена")
         
-    def capture_images(self):
-        """Захват изображений с обеих камер"""
+    def capture_and_save_images(self):
+        """Захват и сохранение изображений с обеих камер одновременно"""
         captured_any = False
+        
+        # Временно меняем текст кнопки для индикации
+        self.capture_button.config(text="📸 Сохраняем...", state='disabled')
         
         # Захват с первой камеры
         if self.cam1 and self.cam1.isOpened():
@@ -407,45 +405,49 @@ class DualCameraApp:
                 self.captured_frame2 = None
                 
         if captured_any:
-            self.save_button.config(state='normal')
-            messagebox.showinfo("Успех", "Снимки сделаны! Теперь можно сохранить.")
+            # Сразу сохраняем
+            self.save_images_silent()
         else:
-            messagebox.showerror("Ошибка", "Не удалось сделать снимки ни с одной камеры")
-            
-    def save_images(self):
-        """Сохранение захваченных изображений"""
+            # Возвращаем кнопку в исходное состояние
+            self.capture_button.config(text="📸 Снимок", state='normal')
+            print("Не удалось сделать снимки ни с одной камеры")
+             
+    def save_images_silent(self):
+        """Сохранение изображений без лишних диалогов"""
         folder = self.directory_entry.get()
         if not os.path.exists(folder):
-            messagebox.showerror("Ошибка", f"Папка не существует: {folder}")
+            self.capture_button.config(text="❌ Ошибка папки", bg="#FF6B6B")
+            self.window.after(2000, lambda: self.capture_button.config(text="📸 Снимок", bg="#FFD700", state='normal'))
             return
-            
+             
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_files = []
-        
+         
         # Сохраняем изображение с первой камеры
         if self.captured_frame1 is not None:
             filename1 = f"{timestamp}_camera1.jpg"
             filepath1 = os.path.join(folder, filename1)
             cv2.imwrite(filepath1, self.captured_frame1)
             saved_files.append(filename1)
-            
+             
         # Сохраняем изображение со второй камеры
         if self.captured_frame2 is not None:
             filename2 = f"{timestamp}_camera2.jpg"
             filepath2 = os.path.join(folder, filename2)
             cv2.imwrite(filepath2, self.captured_frame2)
             saved_files.append(filename2)
-            
+             
         if saved_files:
-            message = f"Сохранены файлы:\n" + "\n".join(saved_files)
-            messagebox.showinfo("Успех", message)
-            
+            # Показываем успех через кнопку
+            self.capture_button.config(text="✅ Сохранено!", bg="#98FB98")
+            print(f"Сохранены файлы: {', '.join(saved_files)}")
+             
+            # Через 2 секунды возвращаем кнопку в исходное состояние
+            self.window.after(2000, lambda: self.capture_button.config(text="📸 Снимок", bg="#FFD700", state='normal'))
+             
             # Сброс захваченных кадров
             self.captured_frame1 = None
             self.captured_frame2 = None
-            self.save_button.config(state='disabled')
-        else:
-            messagebox.showwarning("Предупреждение", "Нет изображений для сохранения")
             
     def close_app(self):
         """Закрытие приложения"""
