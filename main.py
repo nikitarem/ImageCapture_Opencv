@@ -415,9 +415,14 @@ class DualCameraApp:
     def save_images_silent(self):
         """Сохранение изображений без лишних диалогов"""
         folder = self.directory_entry.get()
-        if not os.path.exists(folder):
-            self.capture_button.config(text="❌ Ошибка папки", bg="#FF6B6B")
+        
+        # Создаем папку, если её нет
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception as e:
+            self.capture_button.config(text="❌ Ошибка создания папки", bg="#FF6B6B")
             self.window.after(2000, lambda: self.capture_button.config(text="📸 Снимок", bg="#FFD700", state='normal'))
+            print(f"Ошибка создания папки: {e}")
             return
              
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
